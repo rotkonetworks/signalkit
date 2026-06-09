@@ -22,7 +22,7 @@ jobs:
 
       - name: install system deps
         # tauri 2 on linux needs webkit2gtk-4.1 + soup 3 + the usual gtk/secret
-        # stack. file is required by linuxdeploy if appimage ever comes back.
+        # stack. libfuse2 is needed by linuxdeploy for the appimage bundle.
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -34,7 +34,9 @@ jobs:
             libsecret-1-dev \
             libdbus-1-dev \
             librsvg2-dev \
-            libssl-dev
+            libssl-dev \
+            libfuse2t64 \
+            fuse
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -71,9 +73,12 @@ jobs:
           mkdir -p dist
           cp target/release/signalkit dist/signalkit-linux-x86_64
           for f in target/release/bundle/deb/*.deb \
-                   target/release/bundle/rpm/*.rpm; do
+                   target/release/bundle/rpm/*.rpm \
+                   target/release/bundle/appimage/*.AppImage; do
             [ -e "$f" ] && cp "$f" dist/
           done
+          # write sha256 sums so the aur pkgbuild can reference them.
+          ( cd dist && sha256sum * > SHA256SUMS )
           ls -la dist/
 
       - name: upload workflow artifact
