@@ -7,17 +7,19 @@ pub struct Chat {
     pub id: String,
     #[serde(default)]
     pub name: Option<String>,
-    #[serde(default, rename = "profileName")]
+    // Signal Desktop's conversation JSON is camelCase; our wire format is
+    // snake_case. Rename only on deserialize so serialize keeps snake_case.
+    #[serde(default, rename(deserialize = "profileName"))]
     pub profile_name: Option<String>,
-    #[serde(default, rename = "profileFullName")]
+    #[serde(default, rename(deserialize = "profileFullName"))]
     pub profile_full_name: Option<String>,
     #[serde(default)]
     pub e164: Option<String>,
-    #[serde(default, rename = "serviceId")]
+    #[serde(default, rename(deserialize = "serviceId"))]
     pub service_id: Option<String>,
-    #[serde(default, rename = "groupId")]
+    #[serde(default, rename(deserialize = "groupId"))]
     pub group_id: Option<String>,
-    #[serde(default, rename = "type")]
+    #[serde(default, rename(deserialize = "type"))]
     pub kind: Option<String>,
     #[serde(default)]
     pub active_at: Option<i64>,

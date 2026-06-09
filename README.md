@@ -1,11 +1,21 @@
 # signalkit
 
-Rust CLI + Tauri desktop app for Signal. Read your local Signal Desktop
-history (pensieve-style, no network) and send/receive live messages by linking
-as a Signal secondary device (via [`presage`](https://github.com/whisperfish/presage)).
+**Search and browse your Signal history**, locally on your machine. Then send
+and receive messages too — signalkit can register as a Signal secondary device
+(same mechanism Signal Desktop uses) via
+[`presage`](https://github.com/whisperfish/presage).
 
-Designed to be driven by AI agents too — see **[AGENTS.md](AGENTS.md)** for the
-agent-facing command surface.
+Comes as three things, all sharing the same engine:
+
+- A **Tauri desktop app** with a two-pane chat browser + date-range filter +
+  compose box + live "Listen" toggle.
+- A **CLI** (`signalkit`) that does the same operations from a terminal — handy
+  for grep / jq pipelines.
+- An **MCP server** (`signalkit serve`) so AI agents (Claude Desktop, Claude
+  Code, anything speaking the Model Context Protocol) can drive Signal on
+  your behalf — search for messages, find recipients, send replies.
+
+See **[AGENTS.md](AGENTS.md)** for the agent-facing command surface.
 
 **Status:** Linux only. macOS / Windows support not wired yet (decryption paths
 differ — see Roadmap).
