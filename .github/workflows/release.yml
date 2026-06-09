@@ -1,0 +1,99 @@
+name: release
+
+# fires when you push a v* tag (preferred) or run the workflow manually
+# for a one-off build. binaries land in the github release on success.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x86_64:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # we want the tag's full history so any future changelog/body
+          # extraction has the commits to work with.
+          fetch-depth: 0
+
+      - name: install system deps
+        # tauri 2 on linux needs webkit2gtk-4.1 + soup 3 + the usual gtk/secret
+        # stack. file is required by linuxdeploy if appimage ever comes back.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential pkg-config file \
+            libwebkit2gtk-4.1-dev \
+            libsoup-3.0-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libsecret-1-dev \
+            libdbus-1-dev \
+            librsvg2-dev \
+            libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: crates/signalkit-tauri/pnpm-lock.yaml
+
+      - name: install frontend deps
+        working-directory: crates/signalkit-tauri
+        run: pnpm install --frozen-lockfile
+
+      - name: build cli (release)
+        run: cargo build --release -p signalkit-cli
+
+      - name: build tauri bundle (release, deb + rpm)
+        working-directory: crates/signalkit-tauri
+        run: pnpm tauri build
+
+      - name: stage artifacts
+        # rename the cli binary so the platform/arch is in the filename;
+        # bundles already include version + arch.
+        run: |
+          set -euxo pipefail
+          mkdir -p dist
+          cp target/release/signalkit dist/signalkit-linux-x86_64
+          for f in target/release/bundle/deb/*.deb \
+                   target/release/bundle/rpm/*.rpm; do
+            [ -e "$f" ] && cp "$f" dist/
+          done
+          ls -la dist/
+
+      - name: upload workflow artifact
+        # always keep a copy on the actions run, even for non-tag dispatch.
+        uses: actions/upload-artifact@v4
+        with:
+          name: signalkit-linux-x86_64
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: publish github release
+        # only fires on tag pushes. attaches every file in dist/ to the
+        # release and lets github auto-generate the release notes from
+        # commits since the previous tag.
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true

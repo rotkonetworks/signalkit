@@ -47,3 +47,16 @@ coverage.xml
 # OS files
 .DS_Store
 Thumbs.db
+
+# Rust
+target/
+**/target/
+
+# Node / Vite
+node_modules/
+**/node_modules/
+crates/signalkit-tauri/dist/
+.vite/
+
+# Tauri generated
+crates/signalkit-tauri/src-tauri/gen/

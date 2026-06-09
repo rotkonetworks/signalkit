@@ -1,0 +1,30 @@
+[package]
+name = "signalkit-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+rusqlite.workspace = true
+secret-service.workspace = true
+aes.workspace = true
+cbc.workspace = true
+pbkdf2.workspace = true
+sha1.workspace = true
+hex.workspace = true
+dirs.workspace = true
+
+presage.workspace = true
+presage-store-sqlite.workspace = true
+futures.workspace = true
+url.workspace = true
+uuid.workspace = true
+rand.workspace = true
+base64.workspace = true

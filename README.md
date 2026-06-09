@@ -1,349 +1,195 @@
-# 📱 signal-mcp-server
+# signalkit
 
-MCP Server for retrieving Signal messages using signal-export logic.
+Rust CLI + Tauri desktop app for Signal. Read your local Signal Desktop
+history (pensieve-style, no network) and send/receive live messages by linking
+as a Signal secondary device (via [`presage`](https://github.com/whisperfish/presage)).
 
-## 🎯 Overview
+Designed to be driven by AI agents too — see **[AGENTS.md](AGENTS.md)** for the
+agent-facing command surface.
 
-This MCP server enables AI agents and tools to access Signal Desktop chat messages and attachments via the Model Context Protocol (MCP).
+**Status:** Linux only. macOS / Windows support not wired yet (decryption paths
+differ — see Roadmap).
 
-## 🛠️ Features
+## What you get
 
-- Retrieve Signal messages from your local Signal Desktop database
-- List all Signal chats with contact details and message counts
-- Filter messages by chat/contact name
-- Paginate through message history with offset and limit
-- Support for multiple operating systems (Windows, macOS, Linux)
-- Handle encrypted Signal databases
+| Surface           | What it does                                                       |
+| ----------------- | ------------------------------------------------------------------ |
+| `signalkit` CLI   | `list`, `read`, `search` against Desktop DB; `link`, `send`, `recv`, `whoami` via presage |
+| Tauri desktop app | Browse + per-chat search UI + date filter + compose & send + "Live" polling toggle |
+| MCP server        | `signalkit serve` over stdio — exposes `list_chats`, `read_chat`, `search`, `whoami`, `send` to agents like Claude Desktop |
 
-## 📋 Prerequisites
+## Requirements
 
-- Python 3.13 or higher
-- UV package manager
-- Signal Desktop installed with existing message database
-- Node.js and npm (for MCP inspector tools)
-- Windows, macOS, or Linux operating system
+- Rust 1.85+ (workspace uses 2024 edition transitively)
+- Node 18+ and `pnpm` (only if you want the Tauri UI)
+- Signal Desktop installed and signed in on this machine (so there's a DB to read)
+- Linux with libsecret / gnome-keyring (for Signal Desktop's encrypted DB key)
+- A C toolchain (for bundled SQLCipher)
 
-### 1. Signal Desktop
+## Build
 
-- **Official Download Page:**  
-  [https://signal.org/download/](https://signal.org/download/)
+```bash
+git clone <this-repo>
+cd signal-mcp-server
+cargo build --release -p signalkit-cli
+# binary at ./target/release/signalkit
+```
 
-- **Direct Download Links:**  
-  - [Windows](https://signal.org/download/windows/)  
-  - [Mac](https://signal.org/download/macos/)  
-  - [Linux (Debian-based)](https://signal.org/download/linux/)
+For the desktop app:
+```bash
+cd crates/signalkit-tauri
+pnpm install
+pnpm tauri dev          # development, hot-reload UI
+# or: pnpm tauri build  # bundle a release app
+```
 
-> **Note:** Signal Desktop requires Signal to be installed on your phone for initial setup.
+## First-time setup
 
----
+### 1. Read-only history (works immediately)
 
-### 2. Python
+If Signal Desktop is signed in on this machine, this works with no further setup:
 
-- **Official Download Page:**  
-  [https://www.python.org/downloads/](https://www.python.org/downloads/)
+```bash
+./target/release/signalkit list --pretty
+./target/release/signalkit read "Alice" --limit 50 --pretty
+./target/release/signalkit search "invoice" --pretty
+```
 
-- **Direct Download for Python 3.13.5:**  
-  [Python 3.13.5 Release Page](https://www.python.org/downloads/release/python-3135/)
+It decrypts the Signal Desktop database in place. Read-only, never writes.
 
-- Download the installer for your OS (Windows, macOS, Linux) and follow the setup instructions.
+### 2. Link as a secondary device (needed to send / live-receive)
 
----
+```bash
+./target/release/signalkit link
+```
 
-### 3. UV (Python Package Manager)
+A QR code will print in your terminal. On your phone:
 
-- **Official Documentation & Source:**  
-  [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv)  
-  [UV Documentation](https://docs.astral.sh/uv/)
+1. Open Signal.
+2. **Settings → Linked devices → +** (Android: tap the plus; iOS: "Link New Device").
+3. Scan the QR code in the terminal.
+4. Tap **Link this device** on the phone.
 
-- **Installation (Windows):**
-  ```powershell
-  irm https://astral.sh/uv/install.ps1 | iex
-  ```
-  Or, using pip (if you already have Python and pip installed):
-  ```powershell
-  pip install uv
-  ```
+The CLI prints `linked!` when done. Credentials live at
+`~/.local/share/signalkit/presage.sqlite3`. Delete that file to unlink.
 
-- **Installation (macOS/Linux):**
-  ```bash
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  ```
+### 3. Send a test message to yourself
 
-- **More Info:**  
-  [UV Installation Guide](https://docs.astral.sh/uv/getting-started/installation/)
+```bash
+./target/release/signalkit whoami --pretty
+# aci:    8cbb89b9-1c1a-4791-a322-75688d87f691
+# ...
 
-### 4. Claude Desktop
+./target/release/signalkit send 8cbb89b9-1c1a-4791-a322-75688d87f691 "hi, me"
+# sent (timestamp 1780601019215)
+```
 
-- **Official Download Page:**  
-  [https://claude.ai/download](https://claude.ai/download)
+Check **Note to Self** on your phone — message should be there within a second.
 
-- Download the installer for your OS (Windows, macOS) and follow the setup instructions.
+### 4. Watch for live messages
 
-## 🚀 Installation Signal MCP Server
+```bash
+./target/release/signalkit recv --pretty
+# leave running; messages print as they arrive
+```
 
-1. Clone the repository:
-   ```powershell
-   git clone https://github.com/stefanstranger/signal-mcp-server.git
-   cd signal-mcp-server
-   ```
+### 5. Use as an MCP server for agents
 
-2. Create a virtual environment:
-   ```powershell
-   uv venv .venv --python 3.13
-   ```
-
-3. Activate the virtual environment:
-   - **Windows PowerShell:**
-     ```powershell
-     .\.venv\Scripts\Activate.ps1
-     ```
-   - **macOS/Linux:**
-     ```bash
-     source .venv/bin/activate
-     ```
-
-4. Install dependencies:
-   ```powershell
-   uv pip install fastmcp signal-export
-   ```
-
-## ⚙️ Configuration
-
-### 🔧 Claude Desktop Setup
-
-Usage with Claude Desktop
-Add the following to your claude_desktop_config.json file:
+Wire signalkit into Claude Desktop (or any MCP client). Example
+`~/.config/Claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "signal-mcp-server": {
-         "type": "stdio",
-         "command": "uv",
-         "args": [
-            "run",
-            "--with",
-            "mcp[cli]",
-            "--with",
-            "signal-export",
-            "mcp",
-            "run",
-            "C:\\Github\\signal-mcp-server\\server.py"
-         ]
+    "signalkit": {
+      "command": "/absolute/path/to/signalkit",
+      "args": ["serve"]
     }
   }
 }
 ```
 
-### Signal Data Directory
+The agent will see five tools: `list_chats`, `read_chat`, `search`, `whoami`,
+`send`. Read-only tools work as soon as Signal Desktop is signed in;
+`whoami` and `send` require `signalkit link` first.
 
-The server automatically detects your Signal data directory based on your operating system:
+## Layout
 
-- **Windows**: `%APPDATA%\Signal`
-- **macOS**: `~/Library/Application Support/Signal`
-- **Linux**: `~/.config/Signal` (or Flatpak: `~/.var/app/org.signal.Signal/config/Signal`)
-
-### Encryption
-
-If your Signal database is encrypted, you may need to provide:
-- `password`: Database password (if set)
-- `key`: Encryption key (if required)
-
-## 🏃 Running the Server
-
-### Start MCP Server
-
-```powershell
-uv run .\server.py
+```
+crates/
+  signalkit-core/       # library: Desktop DB reader + presage wrapper
+  signalkit-cli/        # bin: `signalkit` (list/read/search/link/send/recv/whoami)
+  signalkit-tauri/      # Tauri 2 + SolidJS desktop app
+server.py               # legacy Python MCP server (will be retired by `signalkit serve`)
 ```
 
-### Inspect MCP Server
+## Configuration
 
-Using the MCP Inspector:
-```powershell
-npx @modelcontextprotocol/inspector uv run --with mcp[cli] mcp run c://github//signal-mcp-server//server.py
-```
+| Env var            | Default                                    | Purpose                              |
+| ------------------ | ------------------------------------------ | ------------------------------------ |
+| `SIGNAL_DIR`       | `~/.config/Signal` or Flatpak path         | Where Signal Desktop stores its data |
+| `SIGNALKIT_STORE`  | `~/.local/share/signalkit/presage.sqlite3` | presage's protocol state             |
+| `RUST_LOG`         | unset                                      | `info`, `debug`, ...                 |
 
-Using mcptools:
-```powershell
-mcptools web cmd /c "uv.exe run --with mcp[cli] --with signal-export mcp run c:\\github\\signal-mcp-server\\server.py"
-```
+## Troubleshooting
 
-## 📖 Available Tools
+**`libsecret has no entry for application="Signal"`** — Signal Desktop hasn't
+created its keyring entry yet. Launch Signal Desktop once and link it to your
+phone before running signalkit.
 
-### 1. `signal_list_chats`
-Lists all Signal chats with their details.
+**`presage: load: …`** — You haven't linked yet. Run `signalkit link`.
 
-**Parameters:**
-- `source_dir` (optional): Custom Signal data directory path
-- `password` (optional): Database password
-- `key` (optional): Encryption key
-- `include_empty` (optional): Include chats with no messages
-- `include_disappearing` (optional): Include disappearing messages
+**`Signal Desktop directory not found`** — Set `SIGNAL_DIR=/path/to/Signal`,
+or install/launch Signal Desktop.
 
-**Example Response:**
-```json
-[
-  {
-    "name": "John Doe",
-    "number": "+1234567890",
-    "ServiceId": "abc123...",
-    "total_messages": 150
-  }
-]
-```
+**Hangs on `link`** — Check your phone has Signal open and is online. The
+QR has a short TTL; if it expires, rerun `signalkit link` for a fresh one.
 
-### 2. `signal_get_chat_messages`
-Retrieves messages from a specific chat by name.
+**`presage.sqlite3.plain.bak` appeared in `~/.local/share/signalkit/`** —
+That's the pre-encryption backup of your presage store, left there the first
+time you run a build with at-rest encryption. The new `presage.sqlite3` is
+SQLCipher-encrypted with a 32-byte random key stored in libsecret. Verify
+`signalkit whoami` still works, then delete the `.plain.bak`.
 
-**Parameters:**
-- `chat_name` (required): Name of the chat contact
-- `limit` (optional): Maximum number of messages to return
-- `offset` (optional): Number of messages to skip (for pagination)
-- Other parameters same as `signal_list_chats`
+## Roadmap
 
-**Example Response:**
-```json
-[
-  {
-    "date": "2025-07-31T10:30:00",
-    "sender": "John Doe",
-    "body": "Hello! How are you?",
-    "quote": "",
-    "reactions": [],
-    "attachments": []
-  }
-]
-```
+- [x] Read Desktop DB (chats / messages / search / date-range filter)
+- [x] presage link / send / receive (CLI)
+- [x] Tauri + SolidJS UI (browse / search / compose-and-send / Live polling)
+- [x] `signalkit serve` — MCP stdio server (read tools + whoami + send + find_recipient)
+- [x] At-rest encryption for presage store (libsecret-derived passphrase, SQLCipher)
+- [x] Tauri live receive (subprocess `recv` + Tauri events; sub-second latency)
+- [x] Group send (CLI `send-group`, MCP `send_group` — requires master key for now)
+- [ ] `list_groups` / `find_group` (walk presage store for master keys)
+- [ ] macOS keychain decryption path
+- [ ] Windows DPAPI decryption path
+- [ ] Attachment download
 
-### 3. `signal_search_chat`
-Search for specific text within Signal chat messages.
+## Credits
 
-**Parameters:**
-- `chat_name` (required): Name of the chat to search within
-- `query` (required): Text to search for in message bodies
-- `limit` (optional): Maximum number of matching messages to return
-- `source_dir` (optional): Custom Signal data directory path
-- `password` (optional): Database password
-- `key` (optional): Encryption key
-- `include_empty` (optional): Include chats with no messages
-- `include_disappearing` (optional): Include disappearing messages
+This project stands on the shoulders of:
 
-**Example Response:**
-```json
-[
-  {
-    "date": "2025-07-31T10:30:00",
-    "sender": "John Doe", 
-    "body": "Let's meet at the coffee shop tomorrow",
-    "quote": "",
-    "reactions": [],
-    "attachments": []
-  }
-]
-```
+- **[presage](https://github.com/whisperfish/presage)** by the Whisperfish team
+  — the Rust Signal client (link / send / receive). Pulls in
+  [libsignal-service-rs](https://github.com/whisperfish/libsignal-service-rs)
+  and Signal's own
+  [libsignal](https://github.com/signalapp/libsignal). Without these, sending
+  anything would be a multi-year reverse-engineering project.
+- **[pensieve](https://github.com/hdevalence/pensieve)** by Henry de Valence
+  — pioneered the local-Signal-Desktop-DB browser approach. The
+  Chromium-OSCrypt + SQLCipher path is a Rust port of the same key-derivation
+  trick pensieve documented.
+- **[signal-export](https://github.com/carderne/signal-export)** by Chris Arderne
+  — the original Python project this fork started from; the Desktop DB schema
+  understanding came from there.
+- **[Signal Foundation](https://signal.org/)** — for the protocol, the
+  reference clients, and `libsignal`.
+- **[Tauri](https://tauri.app/)**, **[SolidJS](https://www.solidjs.com/)**,
+  **[rusqlite](https://github.com/rusqlite/rusqlite)**,
+  **[secret-service](https://crates.io/crates/secret-service)** — the bones of
+  the desktop app and the keychain plumbing.
 
-## 🎯 Available Prompts
+## License
 
-The server includes pre-built prompts for common analysis tasks:
-
-### 1. `signal_summarize_chat_prompt`
-Generate a summary prompt for recent messages in a specific chat.
-
-### 2. `signal_chat_topic_prompt` 
-Generate a prompt to analyze discussion topics in a chat.
-
-### 3. `signal_chat_sentiment_prompt`
-Generate a prompt to analyze message sentiment in a chat.
-
-### 4. `signal_search_chat_prompt`
-Generate a search prompt for finding specific text in a chat.
-
-## 💡 Usage Examples
-
-### List all chats
-```
-"List all Signal chats please"
-```
-
-### Get recent messages from a specific chat
-```
-"Show me the last 10 messages from the Family group chat"
-```
-
-### Search for topics in a chat
-```
-"What are the main topics discussed in the Work Team chat?"
-```
-
-### Summarize conversations
-```
-"Summarize the recent conversation with John Doe"
-```
-
-### Search within a chat
-```
-"Search for messages containing 'meeting' in the Work Team chat"
-```
-
-### Analyze chat sentiment
-```
-"Analyze the sentiment of recent messages with Sarah"
-```
-
-## 🔒 Security & Privacy
-
-⚠️ **Important**: This server provides access to your personal Signal messages. Please:
-
-- Only run this server locally
-- Never expose it to the internet
-- Be cautious about which AI agents you grant access
-- Consider the privacy of others in your conversations
-- Delete any exported data when no longer needed
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **"Signal database not found"**
-   - Ensure Signal Desktop is installed
-   - Check if the data directory path is correct
-   - Verify you have read permissions
-
-2. **"Database is encrypted"**
-   - Signal databases may be encrypted on some systems
-   - You may need to provide encryption credentials
-
-3. **"No messages found"**
-   - Verify the chat name is spelled correctly
-   - Check if the chat has any messages
-   - Try using `include_empty=True` parameter
-
-4. **"Signal-MCP-Server does not want to start in Claude Desktop"**
-   - Check if there are no other Python versions installed besides the recommended version 3.13.
-   - You may need to uninstall older Python versions installed.
-
-## 📚 References
-
-- [signal-export](https://github.com/carderne/signal-export)
-- [Model Context Protocol](https://modelcontextprotocol.io/)
-- [Create MCP Server](https://github.com/modelcontextprotocol/create-python-server)
-- [FastMCP](https://github.com/jlowin/fastmcp)
-- [MCP Tools](https://github.com/mcptools/mcptools)
-
-## 🙏 Credits
-
-This project builds upon the excellent work of the [signal-export](https://github.com/carderne/signal-export) project by [Chris Arderne](https://github.com/carderne). The core logic for accessing and reading Signal Desktop databases is derived from and inspired by the signal-export library. I'm grateful for Chris his open-source contribution that made this MCP server possible.
-
-
-## 📄 License
-
-MIT License
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## ⚖️ Disclaimer
-
-This tool is not affiliated with or endorsed by Signal. Use at your own risk and respect the privacy of your conversations.
+AGPL-3.0-only — inherited from [presage](https://github.com/whisperfish/presage).
+See `LICENSE`.

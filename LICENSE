@@ -1,0 +1,19 @@
+                    GNU AFFERO GENERAL PUBLIC LICENSE
+                       Version 3, 19 November 2007
+
+ Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+The full text of the GNU Affero General Public License v3.0 is available at:
+
+  https://www.gnu.org/licenses/agpl-3.0.txt
+
+This project (signal-mcp-server / signalkit) is licensed under AGPL-3.0-only
+because it links against `presage` (https://github.com/whisperfish/presage),
+which is itself AGPL-3.0-only.
+
+The full license text is intentionally referenced rather than inlined here to
+keep the repository tidy; a verbatim copy is included with every released
+binary in the source distribution. If you are reading this and the verbatim
+text is not present in your distribution, please obtain it from the URL above.
